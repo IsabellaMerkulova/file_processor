@@ -1,0 +1,48 @@
+version: '3.3'
+
+services:
+  rabbitmq:
+    image: rabbitmq:3.6.6
+    environment:
+      - RABBITMQ_DEFAULT_USER=admin
+      - RABBITMQ_DEFAULT_PASS=mypass
+    restart: unless-stopped
+    ports:
+      - 5672:5672
+
+  celeryd:
+    build: .
+    image: celery
+    environment:
+      - BROKER_URL=amqp://admin:mypass@rabbitmq:5672//
+      - C_FORCE_ROOT=true
+    volumes:
+      - ./src:/src
+    command: 'celery -A celery_app worker -c 1'
+    restart: unless-stopped
+    depends_on:
+      - rabbitmq
+
+  file_gen:
+    build: .
+    image: file_gen
+    environment:
+      - BROKER_URL=amqp://admin:mypass@rabbitmq:5672//
+      - C_FORCE_ROOT=true
+    volumes:
+      - ./src:/src
+    command: 'python file_generator.py'
+    restart: unless-stopped
+    depends_on:
+      - rabbitmq
+
+  postgres:
+    image: timescale/timescaledb:latest-pg11
+    environment:
+      POSTGRES_PASSWORD: 123
+    restart: unless-stopped
+    ports:
+      - 5432:5432
+    volumes:
+      - ./init.sql:/docker-entrypoint-initdb.d/01.init.sql
+    command: postgres -c log_statement=all -c lock_timeout=5000 -c statement_timeout=5000
